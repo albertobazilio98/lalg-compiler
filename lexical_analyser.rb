@@ -1,3 +1,4 @@
+require 'byebug'
 class LexicalAnalyser
 
   def initialize file_name
@@ -16,30 +17,31 @@ class LexicalAnalyser
       token: '',
       description: nil
     }
-    @accumulator = ''
     @current_character = nil
     @tokens = []
     @commentary = false
     @errors = []
+    @accumulator = ''
 
-    @lines.each do |line, line_index|
+    @lines.each_with_index do |line, line_index|
       @line = line
       @line_index = line_index
-      line.each_char do |character, character_index|
-        puts @token_guess
+      line.each_char do |character|
         @accumulator = @token_guess[:token] + character
         @character = character
-        @character_index = character_index
 
         @current_character = character
         next if is_commentary?
         next if is_not_allowed_character?
         next if (character.is_numeric? or character == '.') && is_number?
+        next if is_special_character?
         next if is_identifier?
+        next if is_spacer?
 
-        add_token @token_guess[:token], @token_guess[:description] if is_spacer?
+        add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil? 
       end
     end
+    add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil?
   end
 
   def tokens
@@ -60,9 +62,9 @@ class LexicalAnalyser
   end
 
   def is_not_allowed_character?
-    return false unless @not_allowed_characters.include? @character
+    return false if not @not_allowed_characters.include? @character and @character.ord < 127
 
-    add_token @token_guess[:token], @token_guess[:description]
+    add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil?
     add_error @character, 'error: character not allowed'
 
     true
@@ -72,96 +74,70 @@ class LexicalAnalyser
     return false unless @special_characters.include? @character
     return check_special_character_token if @token_guess[:description] == 'special_character'
 
-    add_token @token_guess[:token], @token_guess[:description]
+    add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil?
     @token_guess[:description] = 'special_character'
     @token_guess[:token] = @character
-    @token_guess[:line] = @line
+    @token_guess[:line] = @line_index
 
     true
   end
 
   def check_special_character_token
-    compound_token = @token_guess[:token] + @character
+    compound_token = @accumulator
     return add_token compound_token, 'special_character' if @compound_special_characters.include? compound_token
     add_token @token_guess[:token], 'special_character'
     add_token @character, 'special_character'
   end
 
-  # def is_integer? # problably deprecated
-  #   return false unless @character.is_numeric?
-  #   if token_guess == 'integer'
-  #     @token_guess[:token] << @character
-  #     return true
-  #   end
-  #   if token_guess.nil? 
-  #     @token_guess[:token] = @character
-  #     @token_guess[:description] = 'integer'
-  #     @token_guess[:line] = @line
-  #     return true
-  #   end
-
-  #   false
-  # end
-
   def is_number?
     return true if is_integer?
-    if (@token_guess[:token] + @character).is_real_number?
-      @token_guess[:token] << @character
-      @token_guess[:description] = 'real_number'
-      @token_guess[:line] = line
-      return true
-    end
-    @token_guess[:token] << @character
-    @token_guess[:description] = 'malformatted_real'
-    @token_guess[:line] = line
-
-    return true if (@token_guess[:token] + '0').is_real_number?
-
-    false
+    is_real_number?
   end
 
   def is_real_number?
-    if (@token_guess[:token] + @character).is_real_number?
+    if @accumulator.is_real_number?
       @token_guess[:token] << @character
       @token_guess[:description] = 'real_number'
-      @token_guess[:line] = line
+      @token_guess[:line] = @line_index
       return true
     end
-    #if (@token_guess[:token] + '0').is_real_number?
+    if @accumulator.has_letter?
+      add_token @token_guess[:token], @token_guess[:description]
+      add_token @character, @character
+      return false
+    end
     @token_guess[:token] << @character
     @token_guess[:description] = 'error: malformatted_real'
-    @token_guess[:line] = line
+    @token_guess[:line] = @line_index
     true
-    #end
   end
 
   def is_integer?
-    return false unless (@token_guess[:token] + @character).is_numeric?
+    return false unless @accumulator.is_numeric?
 
     @token_guess[:token] << @character
     @token_guess[:description] = 'integer'
-    @token_guess[:line] = line
+    @token_guess[:line] = @line_index
 
     true
   end
 
   def is_identifier?
-    byebug
-    return false unless (@token_guess[:token] + @character).is_identifier?
+    return false unless @accumulator.is_identifier?
     return true if is_reserved_word?
     
     @token_guess[:token] << @character
     @token_guess[:description] = 'identifier'
-    @token_guess[:line] = @line
+    @token_guess[:line] = @line_index
     true
   end
 
   def is_reserved_word?
-    return false unless @reserved_words.include? (@token_guess[:token] + @character)
+    return false unless @reserved_words.include? @accumulator
 
     @token_guess[:token] << @character
     @token_guess[:description] = @token_guess[:token]
-    @token_guess[:line] = @line
+    @token_guess[:line] = @line_index
 
     true
   end
@@ -175,8 +151,8 @@ class LexicalAnalyser
   def clear_token_accumulator
     @token_guess = {
       line: nil,
-      accumulator: '',
-      token: nil
+      token: '',
+      description: nil
     }
   end
 
@@ -189,26 +165,31 @@ class LexicalAnalyser
   end
 
   def add_error token, description
-    @errors << { token: token, description: description, line: @token_guess[:line] }
-
+    @errors << { token: token, description: description, line: @line_index }
+    clear_token_accumulator
+    
     true
   end
 end
 
 class String
   def is_numeric?
-    not (self =~ /\a\d+\z/).nil?
+    not (self =~ /\A\d+\z/).nil?
   end
  
   def is_letter?
-    not (self =~ /\a[A-Za-z]\z/).nil?
+    not (self =~ /\A[A-Za-z]\z/).nil?
   end
 
   def is_real_number?
-    not (self =~ /\a\d+.\d+\z/).nil?
+    not (self =~ /\A\d+.\d+\z/).nil?
   end
 
   def is_identifier?
-    not (self =~ /\a[a-zA-Z]+[0-9a-zA-Z]*\z/).nil?
+    not (self =~ /\A[a-zA-Z]+[0-9a-zA-Z]*\z/).nil?
+  end
+
+  def has_letter?
+    not (self =~ /[A-Za-z]/).nil?
   end
 end
