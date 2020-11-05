@@ -30,7 +30,6 @@ class LexicalAnalyser
         @character = character
 
         next if is_commentary?
-        # byebug if @token_guess[:token] == 'bata.'
         next if is_special_character?
         next if is_spacer?
         next if is_not_allowed_character?
@@ -138,8 +137,7 @@ class LexicalAnalyser
       
       return true
     end
-    # puts @token_guess[:description]
-    # # # byebug
+    
     unless @accumulator.is_identifier?
       if @character == '.' and ['error: malformatted_identifier', 'identifier'].include? @token_guess[:description]
         add_token unless [nil, 'identifier'].include? @token_guess[:description]
