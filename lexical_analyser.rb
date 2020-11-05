@@ -4,7 +4,6 @@ class LexicalAnalyser
   def initialize file_name
     @lines = File.open(file_name).readlines
 
-    @blank_spaces = [' ', '\n', '\t']
     @not_allowed_characters = ['!', '"', '#', '$', '%', '&', '\'', '?', '@', '[', ']', '\\', '^', '_', '`']
     @special_characters = [';', '(', ')', ',', ':', '=', '>', '<', '+', '-', '*', '/']
     @compound_special_characters = ['<>', '>=', '<=', ':=']
@@ -17,7 +16,7 @@ class LexicalAnalyser
       token: '',
       description: nil
     }
-    @current_character = nil
+    @character = nil
     @tokens = []
     @commentary = false
     @errors = []
@@ -30,18 +29,17 @@ class LexicalAnalyser
         @accumulator = @token_guess[:token] + character
         @character = character
 
-        @current_character = character
         next if is_commentary?
-        next if is_not_allowed_character?
-        next if (character.is_numeric? or character == '.') && is_number?
+        # byebug if @token_guess[:token] == 'bata.'
         next if is_special_character?
-        next if is_identifier?
         next if is_spacer?
-
-        add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil? 
+        next if is_not_allowed_character?
+        next if is_identifier?
+        next if is_number?
+        add_token 
       end
     end
-    add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil?
+    add_token 
   end
 
   def tokens
@@ -55,8 +53,8 @@ class LexicalAnalyser
   private
 
   def is_commentary?
-    return @commentary = true if @current_character == '{'
-    return @commentary = false if @current_character == '}'
+    return @commentary = true if @character == '{'
+    return @commentary = false if @character == '}'
 
     @commentary
   end
@@ -64,7 +62,7 @@ class LexicalAnalyser
   def is_not_allowed_character?
     return false if not @not_allowed_characters.include? @character and @character.ord < 127
 
-    add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil?
+    add_token 
     add_error @character, 'error: character not allowed'
 
     true
@@ -74,7 +72,7 @@ class LexicalAnalyser
     return false unless @special_characters.include? @character
     return check_special_character_token if @token_guess[:description] == 'special_character'
 
-    add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil?
+    add_token 
     @token_guess[:description] = 'special_character'
     @token_guess[:token] = @character
     @token_guess[:line] = @line_index
@@ -90,7 +88,10 @@ class LexicalAnalyser
   end
 
   def is_number?
+    return false unless @character.is_numeric? or @character == '.'
+    add_token unless [nil, 'integer', 'real_number', 'error: malformatted_real_number'].include? @token_guess[:description]
     return true if is_integer?
+
     is_real_number?
   end
 
@@ -102,12 +103,12 @@ class LexicalAnalyser
       return true
     end
     if @accumulator.has_letter?
-      add_token @token_guess[:token], @token_guess[:description]
+      add_token 
       add_token @character, @character
       return false
     end
     @token_guess[:token] << @character
-    @token_guess[:description] = 'error: malformatted_real'
+    @token_guess[:description] = 'error: malformatted_real_number'
     @token_guess[:line] = @line_index
     true
   end
@@ -123,9 +124,37 @@ class LexicalAnalyser
   end
 
   def is_identifier?
-    return false unless @accumulator.is_identifier?
+    if ['integer', 'real_number', 'error: malformatted_real_number'].include? @token_guess[:description] and @character.is_letter?
+      @token_guess[:token] << @character
+      @token_guess[:description] = 'error: malformatted_identifier'
+      @token_guess[:line] = @line_index
+      
+      return true
+    end
+    if @token_guess[:description] == 'error: malformatted_identifier' and (@character.is_letter? or @character == '.')
+      @token_guess[:token] << @character
+      @token_guess[:description] = 'error: malformatted_identifier'
+      @token_guess[:line] = @line_index
+      
+      return true
+    end
+    # puts @token_guess[:description]
+    # # # byebug
+    unless @accumulator.is_identifier?
+      if @character == '.' and ['error: malformatted_identifier', 'identifier'].include? @token_guess[:description]
+        add_token unless [nil, 'identifier'].include? @token_guess[:description]
+        @token_guess[:token] << @character
+        @token_guess[:description] = 'error: malformatted_identifier'
+        @token_guess[:line] = @line_index
+
+        return true
+      end
+      return false
+    end
+
     return true if is_reserved_word?
-    
+
+    add_token unless [nil, 'identifier'].include? @token_guess[:description]
     @token_guess[:token] << @character
     @token_guess[:description] = 'identifier'
     @token_guess[:line] = @line_index
@@ -143,8 +172,8 @@ class LexicalAnalyser
   end
 
   def is_spacer?
-    return false unless @blank_spaces.include? @current_character
-    add_token @token_guess[:token], @token_guess[:description] unless @token_guess[:description].nil?
+    return false unless @character.is_blank_space?
+    add_token 
     true
   end
 
@@ -154,17 +183,30 @@ class LexicalAnalyser
       token: '',
       description: nil
     }
+    @accumulator = @token_guess[:token] + @character
   end
 
-  def add_token token, description
+  def is_dot_mistake? token
+    not (token =~ /\A[^\.]+\.\z/).nil?
+  end
+
+  def add_token token = @token_guess[:token], description = @token_guess[:description]
+    return false if description.nil?
     return add_error token, description if description.start_with?('error: ')
+
     @tokens << { token: token, description: description == 'special_character' ? token : description }
     clear_token_accumulator
 
     true
   end
 
-  def add_error token, description
+  def add_error token = @token_guess[:token], description = @token_guess[:description]
+    return false if description.nil?
+    if token == '.'
+      add_token token, token
+      return false
+    end
+
     @errors << { token: token, description: description, line: @line_index }
     clear_token_accumulator
     
@@ -189,7 +231,12 @@ class String
     not (self =~ /\A[a-zA-Z]+[0-9a-zA-Z]*\z/).nil?
   end
 
+  def is_blank_space?
+    not (self =~ /\A\s\z/).nil?
+  end
+
   def has_letter?
     not (self =~ /[A-Za-z]/).nil?
   end
+
 end

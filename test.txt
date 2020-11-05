@@ -1,4 +1,12 @@
-tetse
-saas
-asasa
-batata
+11.23 123 a-1 bata.at 1..02 prog@ram nome1;
+exemplo 1
+var a, a1, b: integer;a-1bata.at
+begin. read(@, b);
+a1:= a + b - 2b + 1..02 - .045.52;while a1>a do
+begin
+write($);
+a1:= a1-1;
+end;
+if a<> b then write(a);
+end . end .
+

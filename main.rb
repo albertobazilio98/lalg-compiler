@@ -6,5 +6,5 @@ a.tokens.each do |token|
     puts "#{token[:token]} - #{token[:description]}"
 end
 a.errors.each do |error|
-    puts "#{error[:description]} \"#{error[:token]}\" at line #{error[:line]}"
+    puts "#{error[:description]} \"#{error[:token]}\" at line #{error[:line] + 1}"
 end
