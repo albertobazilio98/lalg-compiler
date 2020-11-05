@@ -8,7 +8,7 @@ This is a compiler project to perform the compilation of the LALG language
 
 ### Download
 
-T download repository, open up terminal in desired folder and run
+To download repository, open up terminal in desired folder and run
 ```bash
 $ git clone https://github.com/albertobazilio98/lalg-compiler.git
 $ cd lalg-compiler
