@@ -1,215 +1,184 @@
 require 'byebug'
+
+token_enum = {
+  integer: 0,
+  real: 1,
+  reserved_word: 2,
+  identifier: 3,
+  special_character: 4,
+  error: 5,
+}
+
+error_enum = {
+
+}
+
 class LexicalAnalyser
 
   def initialize file_name
     @lines = File.open(file_name).readlines
 
-    @not_allowed_characters = ['!', '"', '#', '$', '%', '&', '\'', '?', '@', '[', ']', '\\', '^', '_', '`']
-    @special_characters = [';', '(', ')', ',', ':', '=', '>', '<', '+', '-', '*', '/']
-    @compound_special_characters = ['<>', '>=', '<=', ':=']
-    @reserved_words = ['read', 'write', 'if', 'then', 'else', 'while', 'do', 'begin', 'end', 'procedure', 'program', 'real', 'integer', 'var']
-  end
-  
-  def start_analysis
-    @token_guess = {
-      line: nil,
-      token: '',
-      description: nil
-    }
-    @character = nil
     @tokens = []
-    @commentary = false
     @errors = []
-    @accumulator = ''
+    @commentary = false
+    @line = 0
+    @column = 0
+  end
 
-    @lines.each_with_index do |line, line_index|
-      @line = line
-      @line_index = line_index
-      line.each_char do |character|
-        @accumulator = @token_guess[:token] + character
-        @character = character
+  def get_token
+    puts @lines[@line]
+    return nil if characters_ended?
+    skip_blanks
+    @token_complete = false
+    @token_guess = {
+      token: '',
+      description: nil,
+      completed: false,
+      error: nil,
+      line: @line,
+      column: @column,
+    }
 
-        next if is_commentary?
-        next if is_special_character?
-        next if is_spacer?
-        next if is_not_allowed_character?
-        next if is_identifier?
-        next if is_number?
-        add_token 
+    while not is_blank? and not @token_guess[:completed]
+      if not is_allowed_character? or is_special_character? or is_identifier? or is_number?
+        go_to_next_char
       end
+      # puts 'youre not suposed to be here'
+      # puts current_character
+      next
     end
-    add_token 
-  end
 
-  def tokens
-    @tokens
-  end
-
-  def errors
-    @errors
+    return @token_guess
   end
 
   private
 
+  # character methods
+
+  def current_character
+    @lines[@line][@column] unless characters_ended?
+  end
+
+  def next_char
+    return @lines[@line][@column + 1] unless @lines[@line][@column].nil?
+
+    @lines[@line + 1][0]
+  end
+
+  def go_to_next_char
+    return if characters_ended?
+    @column += 1
+    go_to_next_line if line_ended?
+  end
+
+  def go_to_next_line
+    @line += 1
+    @column = 0
+  end
+
+  # skippable methods
+
+  def characters_ended?
+    @lines[@line].nil?
+  end
+
+  def skip_blanks
+    go_to_next_char while not characters_ended? and is_blank?
+  end
+
+  def is_blank?
+    return characters_ended? || is_commentary? || is_spacer?
+  end
+
+  def line_ended?
+    current_character.nil?
+  end
+
+  def is_spacer?
+    current_character.is_blank_space?
+  end
+
   def is_commentary?
-    return @commentary = true if @character == '{'
-    return @commentary = false if @character == '}'
+    return @commentary = true if current_character == '{'
+    if current_character == '}'
+      go_to_next_char
+      return @commentary = false
+    end
 
     @commentary
   end
 
-  def is_not_allowed_character?
-    return false if not @not_allowed_characters.include? @character and @character.ord < 127
+  # helper methods
 
-    add_token 
-    add_error @character, 'error: character not allowed'
+  def lookup_token
+    (@token_guess[:token] + next_char)
+  end
 
-    true
+  # token checking methods
+  
+  def is_allowed_character?
+    return true if not current_character.is_not_allowed_character? and current_character.ord < 127
+
+    @token_guess[:token] = current_character
+    @token_guess[:description] = :error
+    @token_guess[:error] = :character_not_allowed
+    @token_guess[:completed] = true
+
+    false
   end
 
   def is_special_character?
-    return false unless @special_characters.include? @character
-    return check_special_character_token if @token_guess[:description] == 'special_character'
+    return false unless current_character.is_special_character?
+    @token_guess[:token] << current_character
+    
+    if @token_guess[:description] == :special_character
+      @token_guess[:completed] = true
 
-    add_token 
-    @token_guess[:description] = 'special_character'
-    @token_guess[:token] = @character
-    @token_guess[:line] = @line_index
-
-    true
-  end
-
-  def check_special_character_token
-    compound_token = @accumulator
-    return add_token compound_token, 'special_character' if @compound_special_characters.include? compound_token
-    add_token @token_guess[:token], 'special_character'
-    add_token @character, 'special_character'
-  end
-
-  def is_number?
-    return false unless @character.is_numeric? or @character == '.'
-    add_token unless [nil, 'integer', 'real_number', 'error: malformatted_real_number'].include? @token_guess[:description]
-    return true if is_integer?
-
-    is_real_number?
-  end
-
-  def is_real_number?
-    if @accumulator.is_real_number?
-      @token_guess[:token] << @character
-      @token_guess[:description] = 'real_number'
-      @token_guess[:line] = @line_index
       return true
     end
-    if @accumulator.has_letter?
-      add_token 
-      add_token @character, @character
-      return false
-    end
-    @token_guess[:token] << @character
-    @token_guess[:description] = 'error: malformatted_real_number'
-    @token_guess[:line] = @line_index
-    true
-  end
 
-  def is_integer?
-    return false unless @accumulator.is_numeric?
-
-    @token_guess[:token] << @character
-    @token_guess[:description] = 'integer'
-    @token_guess[:line] = @line_index
-
+    @token_guess[:description] = :special_character # if @token_guess[:description].nil? # talvez nn precise desse cara
+    
+    @token_guess[:completed] = true unless lookup_token.is_compound_special_character? # next_char.is_special_character?
+    
     true
   end
 
   def is_identifier?
-    if ['integer', 'real_number', 'error: malformatted_real_number'].include? @token_guess[:description] and @character.is_letter?
-      @token_guess[:token] << @character
-      @token_guess[:description] = 'error: malformatted_identifier'
-      @token_guess[:line] = @line_index
-      
-      return true
+    return false unless (@token_guess[:description].nil? and current_character.is_letter?) or @token_guess[:token].is_identifier?
+    @token_guess[:token] << current_character
+
+    unless lookup_token.is_identifier?
+      @token_guess[:completed] = true
+      @token_guess[:description] = :reserved_word if @token_guess[:token].is_reserved_word?
+    else
+      @token_guess[:description] = :identifier if @token_guess[:description].nil?
     end
-    if @token_guess[:description] == 'error: malformatted_identifier' and (@character.is_letter? or @character == '.')
-      @token_guess[:token] << @character
-      @token_guess[:description] = 'error: malformatted_identifier'
-      @token_guess[:line] = @line_index
-      
-      return true
-    end
+
+    true
+  end
+
+  def is_number?
+    return false unless current_character.is_numeric? or (current_character == '.' and not @token_guess.description.nil?)
+
+    @token_guess[:token] << current_character
     
-    unless @accumulator.is_identifier?
-      if @character == '.' and ['error: malformatted_identifier', 'identifier'].include? @token_guess[:description]
-        add_token unless [nil, 'identifier'].include? @token_guess[:description]
-        @token_guess[:token] << @character
-        @token_guess[:description] = 'error: malformatted_identifier'
-        @token_guess[:line] = @line_index
-
-        return true
-      end
-      return false
+    if lookup_token.is_numeric?
+      @token_guess[:description] = :integer
     end
 
-    return true if is_reserved_word?
-
-    add_token unless [nil, 'identifier'].include? @token_guess[:description]
-    @token_guess[:token] << @character
-    @token_guess[:description] = 'identifier'
-    @token_guess[:line] = @line_index
-    true
-  end
-
-  def is_reserved_word?
-    return false unless @reserved_words.include? @accumulator
-
-    @token_guess[:token] << @character
-    @token_guess[:description] = @token_guess[:token]
-    @token_guess[:line] = @line_index
-
-    true
-  end
-
-  def is_spacer?
-    return false unless @character.is_blank_space?
-    add_token 
-    true
-  end
-
-  def clear_token_accumulator
-    @token_guess = {
-      line: nil,
-      token: '',
-      description: nil
-    }
-    @accumulator = @token_guess[:token] + @character
-  end
-
-  def is_dot_mistake? token
-    not (token =~ /\A[^\.]+\.\z/).nil?
-  end
-
-  def add_token token = @token_guess[:token], description = @token_guess[:description]
-    return false if description.nil?
-    return add_error token, description if description.start_with?('error: ')
-
-    @tokens << { token: token, description: description == 'special_character' ? token : description }
-    clear_token_accumulator
-
-    true
-  end
-
-  def add_error token = @token_guess[:token], description = @token_guess[:description]
-    return false if description.nil?
-    if token == '.'
-      add_token token, token
-      return false
+    if next_char == '.' and @token_guess[:description] != :integer
+      @token_guess[:description] = :error
+      @token_guess[:error] = :malformated_real
     end
 
-    @errors << { token: token, description: description, line: @line_index }
-    clear_token_accumulator
-    
+    if lookup_token.is_real_number?
+      @token_guess[:description] = :real
+    end
+
     true
   end
+
 end
 
 class String
@@ -235,6 +204,22 @@ class String
 
   def has_letter?
     not (self =~ /[A-Za-z]/).nil?
+  end
+
+  def is_not_allowed_character?
+    not (self =~ /[\!\"\#\$\%\&\'\?\@\[\]\\\^\_\`\|]/).nil?
+  end
+
+  def is_special_character?
+    not (self =~ /[\;\(\)\,\:\=\>\<\+\-\*\/\.]/).nil?
+  end
+
+  def is_compound_special_character?
+    not (self =~ /\A(\<\>|\>\=|\<\=|\:\=)\z/).nil?
+  end
+
+  def is_reserved_word?
+    not (self =~ /\A(read|write|if|then|else|while|do|begin|end|procedure|program|real|integer|var)\z/).nil?
   end
 
 end
