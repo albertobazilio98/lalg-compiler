@@ -1,6 +1,6 @@
 # LALG compiler
 
-This is a compiler project to perform the compilation of the LALG language
+This is a compiler project to perform the lexical and syntatic analysis of the LALG language
 
 ## Dependencies
 
@@ -16,19 +16,17 @@ $ cd lalg-compiler
 
 ## Usage
 
-You can use the `test.lalg` file in the directory root, and paste your code there, otherwise you can open the `main.rb` file and change the file you want to use there
-
-Then run
+Run
 
 ```bash
-$ ruby main.rb
+$ ruby main.rb path/to/your/file.lalg
 ```
 
 ## License
 
 MIT License
 
-Copyright (c) 2020 albertobazilio98
+Copyright (c) 2021 albertobazilio98
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -5,6 +5,7 @@ class SyntaticAnalyser
   def initialize file
     @file = file
     @lexical = LexicalAnalyser.new(file)
+    @panic = false
     @errors = []
     @tokens = []
     get_token
@@ -14,38 +15,41 @@ class SyntaticAnalyser
   private
 
   def current_token_kind
-    @current_token[:token_kind]
+    @current_token.nil? ? nil : @current_token[:token_kind]
   end
 
   def bg_red text
     "\e[31m#{text}\e[0m"
   end
 
-  def dont_panic_and_carry_a_towel
-    puts 42
-    go_to_safe_point
-  end
-
-  def go_to_safe_point
-    token = @lexical.get_token
+  def dont_panic_and_carry_a_towel sync_tokens
+    # 42
+    while not sync_tokens.include? current_token_kind and not current_token_kind.nil?
+      puts bg_red "--> expecting `#{sync_tokens.join('|')}`, now `#{current_token_kind}`"
+      get_token
+    end
+    @panic = false
   end
 
   def raise_error_message expected
-    puts @batata
-    puts bg_red "syntax error: expected token `#{expected}` got `#{current_token_kind}` on `#{File.expand_path(@file.path)}:#{@current_token[:line] + 1}:#{@current_token[:column] + 1}`"
+    @panic = true
+    where = @current_token.nil? ? '' : "on `#{File.expand_path(@file.path)}:#{@current_token[:line] + 1}:#{@current_token[:column] + 1}`"
+    puts bg_red "syntax error: expected token `#{expected}` got `#{current_token_kind}` #{1} in production `#{@production}`"
   end
 
   def get_token
     @current_token = @lexical.get_token
+    @tokens << @current_token
     get_token if not @current_token.nil? and @current_token[:description] == :error
   end
 
   # expects
 
   def expect *token_kinds
-    return if @current_token.nil?
-    unless token_kinds.include? current_token_kind
+    # return if @kcurrent_token.nil?
+    unless token_kinds.include? current_token_kind and not @current_token.nil?
       raise_error_message token_kinds.join(' | ')
+      dont_panic_and_carry_a_towel token_kinds if @panic
     end
     get_token
   end
@@ -58,8 +62,9 @@ class SyntaticAnalyser
 
   # <programa> ::= program identifier ; <corpo> .
   def programa
-    @batata = 'programa'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'programa'
+    puts "#{@production} #{current_token_kind}"
+
     expect 'program'
     expect :identifier
     expect ';'
@@ -69,8 +74,9 @@ class SyntaticAnalyser
 
   # <corpo> ::= <dc> begin <comandos> end
   def corpo
-    @batata = 'corpo'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'corpo'
+    puts "#{@production} #{current_token_kind}"
+
     dc
     expect 'begin'
     comandos
@@ -79,16 +85,18 @@ class SyntaticAnalyser
 
   # <dc> ::= <dc_v> <dc_p>
   def dc
-    @batata = 'dc'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'dc'
+    puts "#{@production} #{current_token_kind}"
+
     dc_v
     dc_p
   end
 
   # <dc_v> ::= var <variaveis> : <tipo_var> ; <dc_v> | λ
   def dc_v
-    @batata = 'dc_v'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'dc_v'
+    puts "#{@production} #{current_token_kind}"
+
     return unless current_token_kind == 'var'
     expect 'var'
     variaveis
@@ -100,33 +108,39 @@ class SyntaticAnalyser
 
   # <tipo_var> ::= real | integer
   def tipo_var
-    @batata = 'tipo_var'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'tipo_var'
+    puts "#{@production} #{current_token_kind}"
+
     expect 'real', 'integer'
   end
 
   # <variaveis> ::= identifier <mais_var>
   def variaveis
-    @batata = 'variaveis'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'variaveis'
+    puts "#{@production} #{current_token_kind}"
+
     expect :identifier
     mais_var
   end
 
   # <mais_var> ::= , <variaveis> | λ
   def mais_var
-    @batata = 'mais_var'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? ','
+
+    @production = 'mais_var'
+    puts "#{@production} #{current_token_kind}"
+
     expect ','
     variaveis
   end
 
   # <dc_p> ::= procedure identifier <parametros> ; <corpo_p> <dc_p> | λ
   def dc_p
-    @batata = 'dc_p'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? 'procedure'
+
+    @production = 'dc_p'
+    puts "#{@production} #{current_token_kind}"
+
     expect 'procedure'
     expect :identifier
     parametros
@@ -137,9 +151,11 @@ class SyntaticAnalyser
 
   # <parametros> ::= ( <lista_par> ) | λ
   def parametros
-    @batata = 'parametros'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? '('
+
+    @production = 'parametros'
+    puts "#{@production} #{current_token_kind}"
+
     expect '('
     lista_par
     expect ')'
@@ -147,8 +163,9 @@ class SyntaticAnalyser
 
   # <lista_par> ::= <variaveis> : <tipo_var> <mais_par>
   def lista_par
-    @batata = 'lista_par'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'lista_par'
+    puts "#{@production} #{current_token_kind}"
+
     variaveis
     expect ':'
     tipo_var
@@ -157,17 +174,20 @@ class SyntaticAnalyser
 
   # <mais_par> ::= ; <lista_par> | λ
   def mais_par
-    @batata = 'mais_par'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? ';'
+
+    @production = 'mais_par'
+    puts "#{@production} #{current_token_kind}"
+
     expect ';'
     lista_par
   end
 
   # <corpo_p> ::= <dc_loc> begin <comandos> end ;
   def corpo_p
-    @batata = 'corpo_p'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'corpo_p'
+    puts "#{@production} #{current_token_kind}"
+
     dc_loc
     expect 'begin'
     comandos
@@ -177,16 +197,19 @@ class SyntaticAnalyser
 
   # <dc_loc> ::= <dc_v>
   def dc_loc
-    @batata = 'dc_loc'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'dc_loc'
+    puts "#{@production} #{current_token_kind}"
+
     dc_v
   end
 
   # <lista_arg> ::= ( <argumentos> ) | λ
   def lista_arg
-    @batata = 'lista_arg'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? '('
+
+    @production = 'lista_arg'
+    puts "#{@production} #{current_token_kind}"
+
     expect '('
     argumentos
     expect ')'
@@ -194,40 +217,45 @@ class SyntaticAnalyser
 
   # <argumentos> ::= identifier <mais_ident>
   def argumentos
-    @batata = 'argumentos'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'argumentos'
+    puts "#{@production} #{current_token_kind}"
+    
     expect :identifier
     mais_ident
   end
 
   # <mais_ident> ::= ; <argumentos> | λ
   def mais_ident
-    @batata = 'mais_ident'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? ';'
+
+    @production = 'mais_ident'
+    puts "#{@production} #{current_token_kind}"
+
     expect ';'
     argumentos
   end
 
   # <pfalsa> ::= else <cmd> | λ
   def pfalsa
-    @batata = 'pfalsa'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? 'else'
+
+    @production = 'pfalsa'
+    puts "#{@production} #{current_token_kind}"
+
     expect 'else'
     cmd
   end
 
   # <comandos> ::= <cmd> ; <comandos> | λ
   def comandos
-    @batata = 'comandos'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? 'read', 'write', 'while', 'if', 'begin', 'if', :identifier
+
+    @production = 'comandos'
+    puts "#{@production} #{current_token_kind}"
+
     cmd
     expect ';'
     comandos
-    # |
-    :empty
   end
 
   # <cmd> ::= read ( <variaveis> ) |
@@ -238,8 +266,9 @@ class SyntaticAnalyser
   #           identifier <lista_arg> |
   #           begin <comandos> end
   def cmd
-    @batata = 'cmd'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'cmd'
+    puts "#{@production} #{current_token_kind}"
+
     if match_with_token? 'read'
       expect 'read'
       expect '('
@@ -278,8 +307,9 @@ class SyntaticAnalyser
 
   # <condicao> ::= <expressao> <relacao> <expressao>
   def condicao
-    @batata = 'condicao'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'condicao'
+    puts "#{@production} #{current_token_kind}"
+
     expressao
     relacao
     expressao
@@ -287,32 +317,38 @@ class SyntaticAnalyser
 
   # <relacao> ::= = | <> | >= | <= | > | <
   def relacao
-    @batata = 'relacao'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'relacao'
+    puts "#{@production} #{current_token_kind}"
+
     expect '=', '<>', '>=', '<=', '>', '<'
   end
 
   # <expressao> ::= <termo> <outros_termos>
   def expressao
-    @batata = 'expressao'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'expressao'
+    puts "#{@production} #{current_token_kind}"
+
     termo
     outros_termos
   end
 
   # <op_un> ::= + | - | λ
   def op_un
-    @batata = 'op_un'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? '+', '-'
+
+    @production = 'op_un'
+    puts "#{@production} #{current_token_kind}"
+
     expect '+', '-'
   end
 
   # <outros_termos> ::= <op_ad> <termo> <outros_termos> | λ
   def outros_termos
-    @batata = 'outros_termos'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? '+', '-'
+
+    @production = 'outros_termos'
+    puts "#{@production} #{current_token_kind}"
+
     op_ad
     termo
     outros_termos
@@ -320,15 +356,17 @@ class SyntaticAnalyser
 
   # <op_ad> ::= + | -
   def op_ad
-    @batata = 'op_ad'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'op_ad'
+    puts "#{@production} #{current_token_kind}"
+
     expect '+', '-'
   end
 
   # <termo> ::= <op_un> <fator> <mais_fatores>
   def termo
-    @batata = 'termo'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'termo'
+    puts "#{@production} #{current_token_kind}"
+
     op_un
     fator
     mais_fatores
@@ -336,9 +374,11 @@ class SyntaticAnalyser
 
   # <mais_fatores> ::= <op_mul> <fator> <mais_fatores> | λ
   def mais_fatores
-    @batata = 'mais_fatores'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? '*', '/'
+
+    @production = 'mais_fatores'
+    puts "#{@production} #{current_token_kind}"
+
     op_mul
     fator
     mais_fatores
@@ -346,16 +386,19 @@ class SyntaticAnalyser
 
   # <op_mul> ::= * | /
   def op_mul
-    @batata = 'op_mul'
-    puts "#{@batata} #{current_token_kind}"
+    @production = 'op_mul'
+    puts "#{@production} #{current_token_kind}"
+
     expect '*', '/'
   end
 
   # <fator> ::= identifier | numero_int | numero_real | ( <expressao> )
   def fator
-    @batata = 'fator'
-    puts "#{@batata} #{current_token_kind}"
     return unless match_with_token? :identifier, :integer, '('
+
+    @production = 'fator'
+    puts "#{@production} #{current_token_kind}"
+    
     if current_token_kind == :identifier
       expect :identifier
     elsif current_token_kind == :integer
