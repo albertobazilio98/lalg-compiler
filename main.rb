@@ -1,4 +1,3 @@
-require 'byebug'
 require './syntatic_analyser'
 require './lexical_analyser'
 

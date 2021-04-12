@@ -1,18 +1,3 @@
-require 'byebug'
-
-token_enum = {
-  integer: 0,
-  real: 1,
-  reserved_word: 2,
-  identifier: 3,
-  special_character: 4,
-  error: 5,
-}
-
-error_enum = {
-
-}
-
 class LexicalAnalyser
 
   def initialize file
