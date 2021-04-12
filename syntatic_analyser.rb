@@ -30,10 +30,19 @@ class SyntaticAnalyser
     @panic = false
   end
 
-  def raise_error_message expected
+  def raise_syntatic_error_message expected
     @panic = true
     where = @current_token.nil? ? '' : "on `#{File.expand_path(@file.path)}:#{@current_token[:line] + 1}:#{@current_token[:column] + 1}`"
-    error = "syntax error: expected token `#{expected}` got `#{current_token_kind}` #{where}"
+    got = current_token_kind.nil? ? 'but file ended' : "got `#{current_token_kind}`"
+    error = "syntax error: expected token `#{expected},` #{got} #{where}"
+    @errors << error
+    puts bg_red error
+  end
+
+  def raise_lexical_error
+    @panic = true
+    where = "on `#{File.expand_path(@file.path)}:#{@current_token[:line] + 1}:#{@current_token[:column] + 1}`"
+    error = "lexical error: #{@current_token[:error]} `#{current_token_kind}` #{where}"
     @errors << error
     puts bg_red error
   end
@@ -41,15 +50,18 @@ class SyntaticAnalyser
   def get_token
     @current_token = @lexical.get_token
     @tokens << @current_token
-    get_token if not @current_token.nil? and @current_token[:description] == :error
+    # get_token if not @current_token.nil? and @current_token[:description] == :error
+    if not @current_token.nil? and @current_token[:description] == :error
+      raise_lexical_error
+      get_token
+    end
   end
 
   # expects
 
   def expect *token_kinds
-    # return if @kcurrent_token.nil?
     unless token_kinds.include? current_token_kind and not @current_token.nil?
-      raise_error_message token_kinds.join(' | ')
+      raise_syntatic_error_message token_kinds.join(' | ')
       dont_panic_and_carry_a_towel token_kinds if @panic
     end
     get_token

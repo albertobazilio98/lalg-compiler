@@ -1,0 +1,17 @@
+program batata;
+var a: real
+var b: integer;
+procedure nomep(x: real);
+var a, c: integer;
+begin
+read(c a);
+if a<x+c then
+begin
+a= c+x;
+read(a);
+end 
+else c:= a+else;
+end;
+begin {programa principal}
+read(b);
+end
