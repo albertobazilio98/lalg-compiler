@@ -15,8 +15,8 @@ error_enum = {
 
 class LexicalAnalyser
 
-  def initialize file_name
-    @lines = File.open(file_name).readlines
+  def initialize file
+    @lines = file.readlines
 
     @tokens = []
     @errors = []
@@ -26,7 +26,6 @@ class LexicalAnalyser
   end
 
   def get_token
-    puts @lines[@line]
     return nil if characters_ended?
     skip_blanks
     @token_complete = false
@@ -37,17 +36,16 @@ class LexicalAnalyser
       error: nil,
       line: @line,
       column: @column,
+      token_kind: nil,
     }
 
     while not is_blank? and not @token_guess[:completed]
       if not is_allowed_character? or is_special_character? or is_identifier? or is_number?
         go_to_next_char
       end
-      # puts 'youre not suposed to be here'
-      # puts current_character
-      next
     end
-
+    # puts @token_guess
+    @token_guess[:token_kind] = ([:integer, :real, :identifier].include? @token_guess[:description]) ? @token_guess[:description] : @token_guess[:token]
     return @token_guess
   end
 
@@ -111,6 +109,7 @@ class LexicalAnalyser
   # helper methods
 
   def lookup_token
+    return @token_guess[:token] if next_char.nil?
     (@token_guess[:token] + next_char)
   end
 
@@ -147,10 +146,9 @@ class LexicalAnalyser
   def is_identifier?
     return false unless (@token_guess[:description].nil? and current_character.is_letter?) or @token_guess[:token].is_identifier?
     @token_guess[:token] << current_character
-
     unless lookup_token.is_identifier?
       @token_guess[:completed] = true
-      @token_guess[:description] = :reserved_word if @token_guess[:token].is_reserved_word?
+      @token_guess[:description] = @token_guess[:token].is_reserved_word? ? :reserved_word : :identifier
     else
       @token_guess[:description] = :identifier if @token_guess[:description].nil?
     end
@@ -163,9 +161,8 @@ class LexicalAnalyser
 
     @token_guess[:token] << current_character
     
-    if lookup_token.is_numeric?
-      @token_guess[:description] = :integer
-    end
+    @token_guess[:description] = :integer
+    @token_guess[:completed] = true unless lookup_token.is_numeric?
 
     if next_char == '.' and @token_guess[:description] != :integer
       @token_guess[:description] = :error
